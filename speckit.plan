@@ -1,0 +1,53 @@
+# speckit.plan - Technical Architecture and Implementation Plan
+
+This document describes the technical implementation details for the project.
+
+## 1. System Components
+- **Frontend:** Next.js (React) application.
+- **Backend:** FastAPI (Python) application.
+- **Authentication Provider:** "Better Auth", an external service responsible for user management and JWT issuance.
+- **Database:** Neon DB (PostgreSQL).
+
+## 2. Authentication Flow
+1.  **Frontend (Next.js):** The user signs up or logs in via UI components that interact with the "Better Auth" service.
+2.  **Better Auth:** Upon successful authentication, "Better Auth" generates a JWT containing user information (including a unique user ID, e.g., in the `sub` claim) and returns it to the Next.js client.
+3.  **Token Storage:** The Next.js client securely stores the JWT (e.g., in an HttpOnly cookie or secure local storage).
+4.  **API Requests:** For all requests to the FastAPI backend that require authentication, the Next.js client attaches the JWT to the `Authorization` header as a Bearer token (`Authorization: Bearer <token>`).
+
+## 3. Backend JWT Verification & User Isolation
+The FastAPI backend will implement a security dependency to protect its endpoints.
+
+1.  **Dependency Definition:** A function, let's call it `get_current_user`, will be defined as a FastAPI dependency.
+2.  **Token Extraction:** This dependency will extract the Bearer token from the `Authorization` header of incoming requests.
+3.  **Token Decoding & Verification:**
+    - It will decode the JWT using the public key provided by "Better Auth". The location of the JWKS (JSON Web Key Set) endpoint for "Better Auth" must be configured in the backend.
+    - It will validate the token's signature, expiration (`exp`), issuer (`iss`), and audience (`aud`) claims to ensure it's a valid token from the correct authority.
+4.  **User ID Extraction:** Upon successful validation, the dependency will extract the user's unique identifier from the token's payload (e.g., from the `sub` claim).
+5.  **Return User ID:** The `get_current_user` dependency will return the user ID.
+6.  **Endpoint Injection:** Protected endpoints will depend on `get_current_user`. The returned user ID will be passed as a parameter to the path operation function.
+
+    ```python
+    # Example Endpoint
+    from fastapi import APIRouter, Depends
+
+    router = APIRouter()
+
+    @router.get("/tasks")
+    async def get_user_tasks(current_user_id: str = Depends(get_current_user)):
+        # The 'current_user_id' is now available and guaranteed to be valid.
+        # Query the Neon DB for tasks where owner_id == current_user_id.
+        tasks = db.query("SELECT * FROM tasks WHERE owner_id = :user_id", {"user_id": current_user_id})
+        return tasks
+    ```
+
+## 4. Database Schema (Neon DB)
+-   **`users` table:** While primary user management is handled by "Better Auth", we might need a `users` table to link tasks via foreign keys. The `id` in this table would correspond to the `sub` claim in the JWT.
+-   **`tasks` table:**
+    -   `id`: Primary Key (e.g., UUID).
+    -   `title`: Text, Not Null.
+    -   `description`: Text.
+    -   `status`: Varchar (e.g., 'pending', 'completed').
+    -   `owner_id`: Foreign Key referencing the user ID. **This is the key to enforcing user isolation at the database level.**
+    -   `created_at`, `updated_at`: Timestamps.
+
+All database queries for tasks (Read, Update, Delete) MUST include a `WHERE owner_id = :current_user_id` clause to ensure data segregation.

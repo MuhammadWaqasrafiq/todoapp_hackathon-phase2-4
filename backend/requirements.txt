@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-jose[cryptography] # For JWT decoding and verification
+passlib[bcrypt] # For password hashing
+SQLAlchemy
+psycopg2-binary # PostgreSQL adapter for Neon DB
+python-dotenv # For environment variables
