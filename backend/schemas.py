@@ -1,16 +1,14 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
-import datetime
+from pydantic import BaseModel
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
+# This file is kept for now, in case we need to define any schemas
+# that are not directly tied to a database model.
+# For now, we rely on SQLModel to act as both the ORM model and the Pydantic schema.
 
-class UserResponse(BaseModel):
-    id: str
-    email: EmailStr
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+class TaskCreate(BaseModel):
+    title: str
+    description: str | None = None
 
-    class Config:
-        from_attributes = True # Allow ORM models to be converted to Pydantic models
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None

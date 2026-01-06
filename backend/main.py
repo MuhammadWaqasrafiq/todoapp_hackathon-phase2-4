@@ -1,45 +1,37 @@
-import os
-import uuid
-from datetime import datetime
-
-from fastapi import FastAPI, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import FastAPI, Depends, HTTPException
+from sqlmodel import Session, create_engine
 from dotenv import load_dotenv
+import os
 
-from database import SessionLocal, engine, get_db, Base
-from models import User
-from schemas import UserCreate, UserResponse
-from auth import get_password_hash
+from backend.auth import get_current_user
+from backend.models import User
+from backend.database import engine
+from backend.routers import tasks
 
 # Load environment variables
 load_dotenv()
 
-# Create all tables defined in models.py
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
+app.include_router(tasks.router)
+
+def get_session():
+    with Session(engine) as session:
+        yield session
 
 @app.get("/")
 async def root():
     return {"message": "FastAPI backend is running!"}
 
-@app.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def signup(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
-    if db_user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
-
-    hashed_password = get_password_hash(user.password)
-    new_user_id = str(uuid.uuid4()) # Generate a UUID for the user ID
-
-    db_user = User(
-        id=new_user_id,
-        email=user.email,
-        hashed_password=hashed_password,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+@app.get("/api/v1/users/me", response_model=User)
+async def read_users_me(current_user_id: str = Depends(get_current_user), session: Session = Depends(get_session)):
+    user = session.get(User, current_user_id)
+    if not user:
+        # This case might happen if a user was deleted from the DB but their JWT is still valid.
+        # Or, if we decide not to create a user record for every JWT.
+        # For now, we can create one on the fly.
+        user = User(id=current_user_id, email="placeholder@example.com") # Placeholder email
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        # raise HTTPException(status_code=404, detail="User not found")
+    return user

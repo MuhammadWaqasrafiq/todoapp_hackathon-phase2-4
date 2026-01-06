@@ -1,15 +1,21 @@
-from sqlalchemy import Column, String, DateTime
-from sqlalchemy.sql import func
-from database import Base
+from typing import List, Optional
+from sqlmodel import Field, Relationship, SQLModel
+from datetime import datetime
 
-class User(Base):
-    __tablename__ = "users"
+class User(SQLModel, table=True):
+    id: str = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    
+    tasks: List["Task"] = Relationship(back_populates="owner")
 
-    id = Column(String, primary_key=True, index=True) # Corresponds to 'sub' claim from JWT
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+class Task(SQLModel, table=True):
+    id: int = Field(default=None, primary_key=True)
+    title: str
+    description: Optional[str] = None
+    status: str = Field(default="pending")
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": datetime.utcnow})
 
-    # We will not store full user data here, primarily just what's needed to link tasks
-    # and potentially for internal password verification if a local signup is also allowed.
+    owner_id: str = Field(foreign_key="user.id")
+    owner: User = Relationship(back_populates="tasks")
