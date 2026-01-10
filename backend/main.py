@@ -1,37 +1,51 @@
-from fastapi import FastAPI, Depends, HTTPException
-from sqlmodel import Session, create_engine
-from dotenv import load_dotenv
 import os
+import logging
+from pathlib import Path
+from dotenv import load_dotenv
 
+# --- Add logging ---
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("sqlmodel").setLevel(logging.DEBUG)
+
+
+# --- STEP 1: LOAD ENV FROM ROOT ---
+# Terminal root folder mein hai, isliye hum root se .env uthayenge
+root_env = Path.cwd() / ".env"
+backend_env = Path(__file__).parent / ".env"
+
+if root_env.exists():
+    load_dotenv(dotenv_path=root_env)
+    print(f"✅ Success: .env loaded from ROOT: {root_env}")
+elif backend_env.exists():
+    load_dotenv(dotenv_path=backend_env)
+    print(f"✅ Success: .env loaded from BACKEND: {backend_env}")
+else:
+    print("❌ ERROR: .env file NOT FOUND anywhere!")
+
+# --- STEP 2: VERIFY KEY BEFORE IMPORTS ---
+if not os.getenv("BETTER_AUTH_SECRET"):
+    print("⚠️ WARNING: BETTER_AUTH_SECRET is still empty in os.environ!")
+
+# --- STEP 3: NOW IMPORT MODULES ---
+from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from backend.auth import get_current_user
 from backend.models import User
-from backend.database import engine
+from backend.database import engine, get_session
 from backend.routers import tasks
 
-# Load environment variables
-load_dotenv()
-
 app = FastAPI()
-app.include_router(tasks.router)
 
-def get_session():
-    with Session(engine) as session:
-        yield session
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(tasks.router)
 
 @app.get("/")
 async def root():
     return {"message": "FastAPI backend is running!"}
-
-@app.get("/api/v1/users/me", response_model=User)
-async def read_users_me(current_user_id: str = Depends(get_current_user), session: Session = Depends(get_session)):
-    user = session.get(User, current_user_id)
-    if not user:
-        # This case might happen if a user was deleted from the DB but their JWT is still valid.
-        # Or, if we decide not to create a user record for every JWT.
-        # For now, we can create one on the fly.
-        user = User(id=current_user_id, email="placeholder@example.com") # Placeholder email
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        # raise HTTPException(status_code=404, detail="User not found")
-    return user

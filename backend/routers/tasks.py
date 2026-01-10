@@ -7,7 +7,7 @@ from backend.database import get_session
 from backend.models import Task, User
 from backend.schemas import TaskCreate, TaskUpdate
 
-router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
+router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 @router.post("/", response_model=Task, status_code=status.HTTP_201_CREATED)
 def create_task(task: TaskCreate, current_user_id: str = Depends(get_current_user), session: Session = Depends(get_session)):
