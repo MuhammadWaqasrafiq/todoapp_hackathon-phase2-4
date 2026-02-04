@@ -1,49 +1,52 @@
-// src/lib/api.ts
+import { authClient } from "./auth-client"
 
-import { authClient } from './auth-client';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
 
-const API_URL = 'http://localhost:8000'; // The URL of the FastAPI backend
+export async function fetchWithAuth(url: string, options: RequestInit = {}) {
+    // Attempt to get session/token using Better Auth client
+    const session = await authClient.getSession()
+    console.log("DEBUG: Full session object:", JSON.stringify(session, null, 2))
 
-// A function to get the session from wherever it's stored
-async function getSession() {
-  const session = await authClient.getSession();
-  if (!session) {
-    return { jwt: null };
-  }
-  return session;
+    // Try to find a JWT (starts with ey...)
+    // @ts-ignore
+    let token = session?.data?.token || session?.data?.session?.token || session?.data?.accessToken
+
+    // If token is opaque (short, no dots), try to check if there is another field
+    if (token && !token.startsWith("ey")) {
+        console.warn("DEBUG: Token does not look like a JWT (no 'ey' prefix). Value:", token)
+        // Fallback: Check if there's an idToken or similar
+        // @ts-ignore
+        if (session?.data?.idToken) token = session.data.idToken
+    }
+
+    console.log("DEBUG: Final token used:", token)
+
+    if (!token) {
+        console.warn("No auth token found in session")
+    }
+
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(options.headers as Record<string, string>),
+    }
+
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+    }
+
+    const response = await fetch(`${API_URL}${url}`, {
+        ...options,
+        credentials: "include",
+        headers
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text(); // Get the error response body
+        console.error(`API Error: ${response.status} - ${response.statusText}`, errorText);
+        throw new Error(`API Error: ${response.status} - ${response.statusText}. Details: ${errorText}`)
+    }
+
+    if (response.status === 204) return null;
+
+    return response.json()
 }
-
-// A helper function to make authenticated API requests
-async function fetchFromApi(path: string, options: RequestInit = {}) {
-  const session = await getSession();
-
-  if (!session?.jwt) {
-    // Or handle not-logged-in state appropriately
-    throw new Error('No JWT token found. Please log in.');
-  }
-
-  const headers = {
-    ...options.headers,
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${session.jwt}`,
-  };
-
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new Error(`API request failed with status ${response.status}`);
-  }
-
-  return response.json();
-}
-
-// API functions for tasks
-export const getTasks = () => fetchFromApi('/tasks');
-export const createTask = (title: string, description: string) =>
-  fetchFromApi('/tasks', {
-    method: 'POST',
-    body: JSON.stringify({ title, description, status: 'pending' }),
-  });

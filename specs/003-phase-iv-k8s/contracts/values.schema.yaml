@@ -1,0 +1,57 @@
+# Helm Values Schema (Contract)
+
+type: object
+properties:
+  backend:
+    type: object
+    properties:
+      replicaCount:
+        type: integer
+        default: 1
+      image:
+        type: object
+        properties:
+          repository:
+            type: string
+          tag:
+            type: string
+          pullPolicy:
+            type: string
+            enum: [Always, IfNotPresent, Never]
+      service:
+        type: object
+        properties:
+          port:
+            type: integer
+            default: 8000
+    required: [image]
+
+  frontend:
+    type: object
+    properties:
+      replicaCount:
+        type: integer
+        default: 1
+      image:
+        type: object
+        properties:
+          repository:
+            type: string
+          tag:
+            type: string
+          pullPolicy:
+            type: string
+      service:
+        type: object
+        properties:
+          port:
+            type: integer
+            default: 3000
+      ingress:
+        type: object
+        properties:
+          enabled:
+            type: boolean
+          host:
+            type: string
+    required: [image]

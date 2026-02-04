@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+.env.local
+.venv
+venv/
+
+# Dependencies
+node_modules/
+__pycache__/
+*.egg-info/
+
+# Logs
+*.log
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Build
+dist/
+build/
+coverage/
+
+# IDE
+.vscode/
+.idea/

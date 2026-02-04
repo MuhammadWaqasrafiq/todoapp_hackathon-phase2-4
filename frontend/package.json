@@ -6,22 +6,30 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "dotenv -e .env.local -- better-auth migrate"
   },
   "dependencies": {
-    "@types/jsonwebtoken": "^9.0.10",
-    "better-auth": "^1.4.10",
-    "jsonwebtoken": "^9.0.3",
-    "next": "16.1.1",
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/react": "^3.0.5",
+    "ai": "^6.0.67",
+    "better-auth": "^1.4.9",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.562.0",
+    "next": "^16.1.6",
     "pg": "^8.16.3",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@better-auth/cli": "^1.4.17",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
