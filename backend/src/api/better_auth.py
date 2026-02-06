@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 from typing import Optional
 import uuid
@@ -32,7 +33,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, BETTER_AUTH_SECRET, algorithm="HS256")
     return encoded_jwt
 
-@router.post("/sign-up/email")
+@router.post("/sign-up/email", response_class=JSONResponse)
 async def better_auth_sign_up(request: Request, session: Session = Depends(get_session)):
     body = await request.json()
     email = body.get("email")
@@ -65,7 +66,6 @@ async def better_auth_sign_up(request: Request, session: Session = Depends(get_s
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     auth_session = AuthSession(
-        id=str(uuid.uuid4()),
         userId=user.id,
         token=token,
         expiresAt=expires_at
@@ -78,8 +78,8 @@ async def better_auth_sign_up(request: Request, session: Session = Depends(get_s
         data={"sub": user.id, "email": user.email}
     )
 
-    # Return Better Auth compatible response
-    return {
+    # Prepare Better Auth compatible response
+    response_data = {
         "session": {
             "user": {
                 "id": user.id,
@@ -93,7 +93,22 @@ async def better_auth_sign_up(request: Request, session: Session = Depends(get_s
         }
     }
 
-@router.post("/sign-in/email")
+    # Create response with session token in cookie
+    response = JSONResponse(content=response_data)
+
+    # Set session token as cookie for Better Auth compatibility
+    response.set_cookie(
+        key="taskoo-v2.session_token",
+        value=token,
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+        max_age=30 * 24 * 60 * 60  # 30 days in seconds
+    )
+
+    return response
+
+@router.post("/sign-in/email", response_class=JSONResponse)
 async def better_auth_sign_in(request: Request, session: Session = Depends(get_session)):
     body = await request.json()
     email = body.get("email")
@@ -112,7 +127,6 @@ async def better_auth_sign_in(request: Request, session: Session = Depends(get_s
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     auth_session = AuthSession(
-        id=str(uuid.uuid4()),
         userId=user.id,
         token=token,
         expiresAt=expires_at
@@ -125,8 +139,8 @@ async def better_auth_sign_in(request: Request, session: Session = Depends(get_s
         data={"sub": user.id, "email": user.email}
     )
 
-    # Return Better Auth compatible response
-    return {
+    # Prepare Better Auth compatible response
+    response_data = {
         "session": {
             "user": {
                 "id": user.id,
@@ -140,8 +154,35 @@ async def better_auth_sign_in(request: Request, session: Session = Depends(get_s
         }
     }
 
-@router.post("/sign-out")
+    # Create response with session token in cookie
+    response = JSONResponse(content=response_data)
+
+    # Set session token as cookie for Better Auth compatibility
+    response.set_cookie(
+        key="taskoo-v2.session_token",
+        value=token,
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+        max_age=30 * 24 * 60 * 60  # 30 days in seconds
+    )
+
+    return response
+
+@router.post("/sign-out", response_class=JSONResponse)
 async def better_auth_sign_out(request: Request, session: Session = Depends(get_session)):
     # In a real implementation, you'd invalidate the session token
-    # For now, just return success
-    return {"success": True}
+    # For now, just return success with cookie clearing
+
+    response = JSONResponse(content={"success": True})
+
+    # Clear the session cookie
+    response.set_cookie(
+        key="taskoo-v2.session_token",
+        value="",
+        httponly=True,
+        max_age=0,  # Expire immediately
+        samesite="lax"
+    )
+
+    return response

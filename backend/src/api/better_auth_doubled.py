@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlmodel import Session, select
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi.responses import JSONResponse
+from sqlmodel import Session as DBSession, select  # <--- YE LINE ADD KAREIN
+from sqlalchemy.orm import Session as SQLAlchemySession
 from typing import Optional
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -36,7 +38,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 # Shared function implementations
-async def _common_signup_logic(body: dict, session: Session):
+async def _common_signup_logic(body: dict, session: DBSession):
     email = body.get("email")
     password = body.get("password")
     name = body.get("name", None)
@@ -67,7 +69,6 @@ async def _common_signup_logic(body: dict, session: Session):
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     auth_session = AuthSession(
-        id=str(uuid.uuid4()),
         userId=user.id,
         token=token,
         expiresAt=expires_at
@@ -95,7 +96,7 @@ async def _common_signup_logic(body: dict, session: Session):
         }
     }
 
-async def _common_signin_logic(body: dict, session: Session):
+async def _common_signin_logic(body: dict, session: DBSession):
     email = body.get("email")
     password = body.get("password")
 
@@ -112,7 +113,6 @@ async def _common_signin_logic(body: dict, session: Session):
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     auth_session = AuthSession(
-        id=str(uuid.uuid4()),
         userId=user.id,
         token=token,
         expiresAt=expires_at
@@ -142,34 +142,156 @@ async def _common_signin_logic(body: dict, session: Session):
 
 # Root-level endpoints (Better Auth default)
 @root_router.post("/sign-up/email")
-async def better_auth_root_signup(request: Request, session: Session = Depends(get_session)):
+async def better_auth_root_signup(request: Request, session: DBSession = Depends(get_session)):
     body = await request.json()
     return await _common_signup_logic(body, session)
 
 @root_router.post("/sign-in/email")
-async def better_auth_root_signin(request: Request, session: Session = Depends(get_session)):
+async def better_auth_root_signin(request: Request, session: DBSession = Depends(get_session)):
     body = await request.json()
     return await _common_signin_logic(body, session)
 
-@root_router.post("/sign-out")
-async def better_auth_root_signout(request: Request, session: Session = Depends(get_session)):
+@root_router.post("/sign-out", response_class=JSONResponse)
+async def better_auth_root_signout(request: Request, session: DBSession = Depends(get_session)):
     # In a real implementation, you'd invalidate the session token
-    # For now, just return success
-    return {"success": True}
+    # For now, just return success with cookie clearing
+
+    response = JSONResponse(content={"success": True})
+
+    # Clear the session cookie
+    response.set_cookie(
+        key="taskoo-v2.session_token",
+        value="",
+        httponly=True,
+        max_age=0,  # Expire immediately
+        samesite="lax"
+    )
+
+    return response
+
+@root_router.get("/get-session")
+async def better_auth_root_get_session(
+    request: Request,
+    db: DBSession = Depends(get_session)
+) -> dict:
+    """
+    Get the current session based on the token in cookies or headers.
+    This endpoint is required by Better Auth frontend to check session status.
+    """
+    from ..core.security import verify_token
+
+    try:
+        # Extract user_id from token using the existing security function
+        user_id = verify_token(request=request, db=db)
+
+        # Get user details from the database
+        user = db.exec(select(User).where(User.id == user_id)).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        # Create a session response in Better Auth format
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "createdAt": user.created_at.isoformat(),
+                "updatedAt": user.updated_at.isoformat()
+            },
+            "accessToken": "",  # Frontend will handle the token itself
+        }
+    except HTTPException as e:
+        # Log the error for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Session verification failed: {e.detail}")
+        # Return null session if not authenticated
+        return {"user": None, "accessToken": ""}
+    except Exception as e:
+        # Log unexpected errors
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unexpected error in get-session: {str(e)}")
+        # Return null session for any other error
+        return {"user": None, "accessToken": ""}
 
 # Prefixed endpoints (to match the error path - /api/auth/sign-up/email)
 @prefixed_router.post("/sign-up/email")
-async def better_auth_prefixed_signup(request: Request, session: Session = Depends(get_session)):
+async def better_auth_prefixed_signup(request: Request, session: DBSession = Depends(get_session)):
     body = await request.json()
     return await _common_signup_logic(body, session)
 
 @prefixed_router.post("/sign-in/email")
-async def better_auth_prefixed_signin(request: Request, session: Session = Depends(get_session)):
+async def better_auth_prefixed_signin(request: Request, session: DBSession = Depends(get_session)):
     body = await request.json()
     return await _common_signin_logic(body, session)
 
-@prefixed_router.post("/sign-out")
-async def better_auth_prefixed_signout(request: Request, session: Session = Depends(get_session)):
+@prefixed_router.post("/sign-out", response_class=JSONResponse)
+async def better_auth_prefixed_signout(request: Request, session: DBSession = Depends(get_session)):
     # In a real implementation, you'd invalidate the session token
-    # For now, just return success
-    return {"success": True}
+    # For now, just return success with cookie clearing
+
+    response = JSONResponse(content={"success": True})
+
+    # Clear the session cookie
+    response.set_cookie(
+        key="taskoo-v2.session_token",
+        value="",
+        httponly=True,
+        max_age=0,  # Expire immediately
+        samesite="lax"
+    )
+
+    return response
+
+@prefixed_router.get("/get-session")
+async def better_auth_get_session(
+    request: Request,
+    db: DBSession = Depends(get_session)
+) -> dict:
+    """
+    Get the current session based on the token in cookies or headers.
+    This endpoint is required by Better Auth frontend to check session status.
+    """
+    from ..core.security import verify_token
+
+    try:
+        # Extract user_id from token using the existing security function
+        user_id = verify_token(request=request, db=db)
+
+        # Get user details from the database
+        user = db.exec(select(User).where(User.id == user_id)).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        # Create a session response in Better Auth format
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "createdAt": user.created_at.isoformat(),
+                "updatedAt": user.updated_at.isoformat()
+            },
+            "accessToken": "",  # Frontend will handle the token itself
+        }
+    except HTTPException as e:
+        # Log the error for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Session verification failed: {e.detail}")
+        # Return null session if not authenticated
+        return {"user": None, "accessToken": ""}
+    except Exception as e:
+        # Log unexpected errors
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unexpected error in get-session: {str(e)}")
+        # Return null session for any other error
+        return {"user": None, "accessToken": ""}

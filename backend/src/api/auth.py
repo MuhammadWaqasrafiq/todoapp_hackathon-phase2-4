@@ -42,10 +42,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 import logging
+from fastapi.responses import JSONResponse
 logger = logging.getLogger(__name__)
 
 # Legacy endpoints for compatibility
-@router.post("/auth/register", response_model=dict)  # Changed to dict for compatibility
+@router.post("/auth/register", response_class=JSONResponse)  # Changed to JSONResponse to allow setting cookies
 def register(user_data: UserCreate, session: Session = Depends(get_session)):
     try:
         logger.info(f"Registration attempt for email: {user_data.email}")
@@ -77,7 +78,6 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
         expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
         auth_session = AuthSession(
-            id=str(uuid.uuid4()),
             userId=user.id,
             token=token,
             expiresAt=expires_at
@@ -90,13 +90,26 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
             data={"sub": user.id, "email": user.email}
         )
 
-        logger.info(f"User registered successfully: {user.id}")
-        return {
+        # Create response with session token in cookie
+        response = JSONResponse(content={
             "access_token": access_token,
             "token_type": "bearer",
             "user_id": user.id,
             "email": user.email
-        }
+        })
+
+        # Set session token as cookie for Better Auth compatibility
+        response.set_cookie(
+            key="taskoo-v2.session_token",
+            value=token,
+            httponly=True,
+            secure=False,  # Set to True in production with HTTPS
+            samesite="lax",
+            max_age=30 * 24 * 60 * 60  # 30 days in seconds
+        )
+
+        logger.info(f"User registered successfully: {user.id}")
+        return response
     except Exception as e:
         logger.error(f"Registration error: {str(e)}")
         raise HTTPException(
@@ -104,7 +117,7 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
             detail=f"Registration failed: {str(e)}"
         )
 
-@router.post("/auth/login", response_model=dict)  # Changed to dict for compatibility
+@router.post("/auth/login", response_class=JSONResponse)  # Changed to JSONResponse to allow setting cookies
 def login(login_data: UserLogin, session: Session = Depends(get_session)):
     try:
         logger.info(f"Login attempt for email: {login_data.email}")
@@ -123,7 +136,6 @@ def login(login_data: UserLogin, session: Session = Depends(get_session)):
         expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
         auth_session = AuthSession(
-            id=str(uuid.uuid4()),
             userId=user.id,
             token=token,
             expiresAt=expires_at
@@ -136,13 +148,35 @@ def login(login_data: UserLogin, session: Session = Depends(get_session)):
             data={"sub": user.id, "email": user.email}
         )
 
-        logger.info(f"User logged in successfully: {user.id}")
-        return {
+        # Create response with session token in cookie
+        response = JSONResponse(content={
             "access_token": access_token,
             "token_type": "bearer",
             "user_id": user.id,
             "email": user.email
-        }
+        })
+
+        # Set session token as cookie for Better Auth compatibility
+        response.set_cookie(
+            key="taskoo-v2.session_token",
+            value=token,
+            httponly=True,
+            secure=False,  # Set to True in production with HTTPS
+            samesite="lax",
+            max_age=30 * 24 * 60 * 60  # 30 days in seconds
+        )
+
+        logger.info(f"User logged in successfully: {user.id}")
+        return response
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
+        )
     except HTTPException:
         # Re-raise HTTP exceptions as they are
         raise
@@ -153,8 +187,20 @@ def login(login_data: UserLogin, session: Session = Depends(get_session)):
             detail=f"Login failed: {str(e)}"
         )
 
-@router.post("/auth/logout")
+@router.post("/auth/logout", response_class=JSONResponse)
 def logout(session: Session = Depends(get_session)):
     # In a real implementation, you'd invalidate the session token
-    # For now, just return success
-    return {"message": "Logged out successfully"}
+    # For now, just return success with cookie clearing
+
+    response = JSONResponse(content={"message": "Logged out successfully"})
+
+    # Clear the session cookie
+    response.set_cookie(
+        key="taskoo-v2.session_token",
+        value="",
+        httponly=True,
+        max_age=0,  # Expire immediately
+        samesite="lax"
+    )
+
+    return response

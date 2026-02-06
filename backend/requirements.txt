@@ -8,3 +8,4 @@ pyjwt[crypto]
 python-dotenv
 psycopg2-binary
 passlib[bcrypt]
+bcrypt==4.3.0

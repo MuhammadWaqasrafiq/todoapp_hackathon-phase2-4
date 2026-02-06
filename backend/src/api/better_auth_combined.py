@@ -67,7 +67,6 @@ async def _handle_signup(request: Request, session: Session = Depends(get_sessio
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     auth_session = AuthSession(
-        id=str(uuid.uuid4()),
         userId=user.id,
         token=token,
         expiresAt=expires_at
@@ -113,7 +112,6 @@ async def _handle_signin(request: Request, session: Session = Depends(get_sessio
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     auth_session = AuthSession(
-        id=str(uuid.uuid4()),
         userId=user.id,
         token=token,
         expiresAt=expires_at

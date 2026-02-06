@@ -8,11 +8,18 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is not set")
+    # Fallback to SQLite for local development
+    DATABASE_URL = "sqlite:///./taskoo_local.db"
+    print("DATABASE_URL not set, using local SQLite database: taskoo_local.db")
 
 # Neon/Postgres requires postgresql:// but some libs output postgres://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    # For PostgreSQL connections, we might need to handle SSL issues
+    # Add sslmode parameter if not present
+    if "?sslmode=" not in DATABASE_URL.lower() and "sslmode=" not in DATABASE_URL.lower():
+        DATABASE_URL += "?sslmode=require"
 
 engine = create_engine(DATABASE_URL, echo=True)
 

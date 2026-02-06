@@ -64,7 +64,6 @@ async def better_auth_sign_up(request: Request, session: Session = Depends(get_s
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     auth_session = AuthSession(
-        id=str(uuid.uuid4()),
         userId=user.id,
         token=token,
         expiresAt=expires_at
@@ -111,7 +110,6 @@ async def better_auth_sign_in(request: Request, session: Session = Depends(get_s
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     auth_session = AuthSession(
-        id=str(uuid.uuid4()),
         userId=user.id,
         token=token,
         expiresAt=expires_at
