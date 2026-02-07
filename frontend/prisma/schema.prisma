@@ -1,0 +1,84 @@
+// This is the Prisma schema that matches the Create Task modal fields
+// It defines the database structure for Neon DB (PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tasks        Task[]
+  
+  @@map("user")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  color       String   @default("#FFFFFF")
+  createdAt   DateTime @default(now())
+  tasks       Task[]
+  
+  @@map("category")
+}
+
+model Task {
+  id            Int       @id @default(autoincrement())
+  userId        String
+  title         String
+  description   String?
+  isCompleted   Boolean   @default(false)
+  categoryId    Int?
+  coworkerIds   Json?     // Store as JSON array for co-worker IDs
+  date          DateTime?
+  taskZone      String?   // e.g., "GMT+6"
+  startTime     DateTime?
+  endTime       DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  user       User     @relation(fields: [userId], references: [id])
+  category   Category? @relation(fields: [categoryId], references: [id])
+  
+  @@map("task")
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  role           String   // user, assistant, system, tool
+  content        String?
+  toolCalls      Json?    // Store as JSON for tool calls
+  toolCallId     String?
+  createdAt      DateTime @default(now())
+  
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  
+  @@map("message")
+}
+
+model Conversation {
+  id          Int      @id @default(autoincrement())
+  userId      String
+  title       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  messages    Message[]
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("conversation")
+}

@@ -16,6 +16,10 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated, taskTo
     const [description, setDescription] = useState("")
     const [categories, setCategories] = useState<Category[]>([])
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | undefined>(undefined)
+    const [date, setDate] = useState<string>("")
+    const [taskZone, setTaskZone] = useState<string>("GMT+6")
+    const [startTime, setStartTime] = useState<string>("")
+    const [endTime, setEndTime] = useState<string>("")
     const [isLoading, setIsLoading] = useState(false)
     const { data: session } = authClient.useSession()
 
@@ -25,18 +29,34 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated, taskTo
             fetchWithAuth("/categories")
                 .then((data: unknown) => setCategories(data as Category[]))
                 .catch(err => console.error("Failed to fetch categories", err))
+            
+            // Reset form when opening
+            if (!taskToEdit) {
+                setDate("")
+                setStartTime("")
+                setEndTime("")
+                setTaskZone("GMT+6")
+            }
         }
-    }, [isOpen])
+    }, [isOpen, taskToEdit])
 
     useEffect(() => {
         if (taskToEdit) {
             setTitle(taskToEdit.title)
             setDescription(taskToEdit.description || "")
             setSelectedCategoryId(taskToEdit.category_id)
+            setDate(taskToEdit.date ? new Date(taskToEdit.date).toISOString().split('T')[0] : "")
+            setStartTime(taskToEdit.start_time ? new Date(taskToEdit.start_time).toTimeString().substring(0, 5) : "")
+            setEndTime(taskToEdit.end_time ? new Date(taskToEdit.end_time).toTimeString().substring(0, 5) : "")
+            setTaskZone(taskToEdit.task_zone || "GMT+6")
         } else {
             setTitle("")
             setDescription("")
             setSelectedCategoryId(undefined)
+            setDate("")
+            setStartTime("")
+            setEndTime("")
+            setTaskZone("GMT+6")
         }
     }, [taskToEdit])
 
@@ -46,32 +66,62 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated, taskTo
 
         setIsLoading(true)
         try {
+            // Format date and time properly
+            let fullStartDate: Date | null = null;
+            let fullEndDate: Date | null = null;
+            
+            if (date && startTime) {
+                fullStartDate = new Date(`${date}T${startTime}`);
+            }
+            
+            if (date && endTime) {
+                fullEndDate = new Date(`${date}T${endTime}`);
+            }
+
+            const taskData = {
+                title,
+                description,
+                category_id: selectedCategoryId,
+                date: date ? new Date(date) : null,
+                task_zone: taskZone,
+                start_time: fullStartDate,
+                end_time: fullEndDate
+            }
+
             if (taskToEdit) {
                 await fetchWithAuth(`/${session.user.id}/tasks/${taskToEdit.id}`, {
                     method: "PUT",
-                    body: JSON.stringify({
-                        title,
-                        description,
-                        category_id: selectedCategoryId
-                    })
+                    body: JSON.stringify(taskData)
                 })
+                // Show success toast for update
+                window.dispatchEvent(new CustomEvent('showToast', {
+                    detail: { message: 'Task updated successfully!', type: 'success' }
+                }));
             } else {
                 await fetchWithAuth(`/${session.user.id}/tasks`, {
                     method: "POST",
-                    body: JSON.stringify({
-                        title,
-                        description,
-                        category_id: selectedCategoryId
-                    })
+                    body: JSON.stringify(taskData)
                 })
+                // Show success toast for creation
+                window.dispatchEvent(new CustomEvent('showToast', {
+                    detail: { message: 'Task created successfully!', type: 'success' }
+                }));
             }
             setTitle("")
             setDescription("")
             setSelectedCategoryId(undefined)
+            setDate("")
+            setStartTime("")
+            setEndTime("")
+            setTaskZone("GMT+6")
             onTaskCreated() // This will refresh the dashboard
             onClose()
         } catch (error) {
             console.error("Failed to save task", error)
+            // Show error toast
+            window.dispatchEvent(new CustomEvent('showToast', {
+                detail: { message: 'Failed to save task. Please try again.', type: 'error' }
+            }));
         } finally {
             setIsLoading(false)
         }
@@ -126,21 +176,6 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated, taskTo
                         </div>
                     </div>
 
-                    {/* CO Worker (Visual Placeholder) */}
-                    <div className="space-y-2">
-                        <label className="text-sm text-[var(--text-secondary)]">CO Worker</label>
-                        <div className="flex -space-x-3 items-center">
-                            {[1, 2, 3, 4, 5].map((i) => (
-                                <div key={i} className="w-10 h-10 rounded-full border-2 border-[var(--card-bg)] bg-gray-600 flex items-center justify-center text-xs overflow-hidden">
-                                    <img src={`https://i.pravatar.cc/150?img=${i + 10}`} alt="avatar" className="w-full h-full object-cover" />
-                                </div>
-                            ))}
-                            <button type="button" className="w-10 h-10 rounded-full bg-[var(--primary-gradient-from)] flex items-center justify-center text-white border-2 border-[var(--card-bg)]">
-                                +
-                            </button>
-                        </div>
-                    </div>
-
                     {/* Date & Time Grid */}
                     <div className="grid grid-cols-2 gap-4">
                         {/* Date */}
@@ -148,7 +183,12 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated, taskTo
                             <label className="text-sm text-[var(--text-secondary)]">Date</label>
                             <div className="bg-[var(--background)] p-3 rounded-xl flex items-center gap-3 text-white border border-gray-700">
                                 <Calendar className="w-5 h-5 text-[var(--primary-gradient-from)]" />
-                                <span className="text-sm">24 Dec</span>
+                                <input
+                                    type="date"
+                                    value={date}
+                                    onChange={(e) => setDate(e.target.value)}
+                                    className="bg-transparent text-white focus:outline-none w-full"
+                                />
                             </div>
                         </div>
                         {/* Task Zone */}
@@ -156,7 +196,37 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated, taskTo
                             <label className="text-sm text-[var(--text-secondary)]">Task Zone</label>
                             <div className="bg-[var(--background)] p-3 rounded-xl flex items-center gap-3 text-white border border-gray-700">
                                 <Globe className="w-5 h-5 text-[#6F6FC8]" />
-                                <span className="text-sm">GMT+6</span>
+                                <select
+                                    value={taskZone}
+                                    onChange={(e) => setTaskZone(e.target.value)}
+                                    className="bg-transparent text-white focus:outline-none w-full"
+                                >
+                                    <option value="GMT-12">GMT-12</option>
+                                    <option value="GMT-11">GMT-11</option>
+                                    <option value="GMT-10">GMT-10</option>
+                                    <option value="GMT-9">GMT-9</option>
+                                    <option value="GMT-8">GMT-8</option>
+                                    <option value="GMT-7">GMT-7</option>
+                                    <option value="GMT-6">GMT-6</option>
+                                    <option value="GMT-5">GMT-5</option>
+                                    <option value="GMT-4">GMT-4</option>
+                                    <option value="GMT-3">GMT-3</option>
+                                    <option value="GMT-2">GMT-2</option>
+                                    <option value="GMT-1">GMT-1</option>
+                                    <option value="GMT+0">GMT+0</option>
+                                    <option value="GMT+1">GMT+1</option>
+                                    <option value="GMT+2">GMT+2</option>
+                                    <option value="GMT+3">GMT+3</option>
+                                    <option value="GMT+4">GMT+4</option>
+                                    <option value="GMT+5">GMT+5</option>
+                                    <option value="GMT+6">GMT+6</option>
+                                    <option value="GMT+7">GMT+7</option>
+                                    <option value="GMT+8">GMT+8</option>
+                                    <option value="GMT+9">GMT+9</option>
+                                    <option value="GMT+10">GMT+10</option>
+                                    <option value="GMT+11">GMT+11</option>
+                                    <option value="GMT+12">GMT+12</option>
+                                </select>
                             </div>
                         </div>
                         {/* Task Start */}
@@ -164,7 +234,12 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated, taskTo
                             <label className="text-sm text-[var(--text-secondary)]">Task Start</label>
                             <div className="bg-[var(--background)] p-3 rounded-xl flex items-center gap-3 text-white border border-gray-700">
                                 <Clock className="w-5 h-5 text-[var(--text-secondary)]" />
-                                <span className="text-sm">12:45 PM</span>
+                                <input
+                                    type="time"
+                                    value={startTime}
+                                    onChange={(e) => setStartTime(e.target.value)}
+                                    className="bg-transparent text-white focus:outline-none w-full"
+                                />
                             </div>
                         </div>
                         {/* Task End */}
@@ -172,7 +247,12 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated, taskTo
                             <label className="text-sm text-[var(--text-secondary)]">Task End</label>
                             <div className="bg-[var(--background)] p-3 rounded-xl flex items-center gap-3 text-white border border-gray-700">
                                 <Clock className="w-5 h-5 text-[var(--text-secondary)]" />
-                                <span className="text-sm">07:45 PM</span>
+                                <input
+                                    type="time"
+                                    value={endTime}
+                                    onChange={(e) => setEndTime(e.target.value)}
+                                    className="bg-transparent text-white focus:outline-none w-full"
+                                />
                             </div>
                         </div>
                     </div>

@@ -13,4 +13,9 @@ export interface Task {
     updated_at?: string;
     user_id?: string;
     category_id?: number;
+    coworker_ids?: number[];
+    date?: string;
+    task_zone?: string;
+    start_time?: string;
+    end_time?: string;
 }
