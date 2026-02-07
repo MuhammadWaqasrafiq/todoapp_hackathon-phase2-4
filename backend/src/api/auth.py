@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
 from typing import Optional
 import uuid
@@ -204,3 +204,48 @@ def logout(session: Session = Depends(get_session)):
     )
 
     return response
+
+@router.get("/auth/session", response_class=JSONResponse)
+def get_session_endpoint(request: Request, session: Session = Depends(get_session)):
+    # Extract session token from cookies
+    session_token = request.cookies.get("taskoo-v2.session_token")
+    
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No session token provided"
+        )
+    
+    # Look up the session in the database
+    auth_session = session.exec(
+        select(AuthSession).where(AuthSession.token == session_token)
+    ).first()
+    
+    if not auth_session or auth_session.expiresAt < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired session"
+        )
+    
+    # Get the associated user
+    user = session.exec(
+        select(User).where(User.id == auth_session.userId)
+    ).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    
+    # Return session information
+    return JSONResponse(content={
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name
+        },
+        "session": {
+            "expiresAt": auth_session.expiresAt.isoformat()
+        }
+    })

@@ -11,8 +11,8 @@ def utc_now():
 
 class Session(SQLModel, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True)
-    userId: str
-    token: str
+    userId: str = Field(index=True)
+    token: str = Field(unique=True, index=True)
     expiresAt: datetime
     ipAddress: Optional[str] = None
     userAgent: Optional[str] = None

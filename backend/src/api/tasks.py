@@ -88,6 +88,37 @@ def toggle_task_complete(
     task = service.get_task(task_id, user_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     new_status = not task.is_completed
     return service.update_task(task_id, TaskUpdate(is_completed=new_status), user_id)
+
+# Additional endpoints for better Neon compatibility
+@router.get("/{user_id}/tasks/completed", response_model=list[TaskResponse])
+def list_completed_tasks(
+    user_id: str,
+    skip: int = 0,
+    limit: int = 100,
+    service: TaskService = Depends(get_service),
+    token_user_id: str = Depends(verify_token)
+):
+    if user_id != token_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    # Get all tasks and filter for completed ones
+    all_tasks = service.get_tasks(user_id, skip, limit)
+    completed_tasks = [task for task in all_tasks if task.is_completed]
+    return completed_tasks
+
+@router.get("/{user_id}/tasks/pending", response_model=list[TaskResponse])
+def list_pending_tasks(
+    user_id: str,
+    skip: int = 0,
+    limit: int = 100,
+    service: TaskService = Depends(get_service),
+    token_user_id: str = Depends(verify_token)
+):
+    if user_id != token_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    # Get all tasks and filter for pending ones
+    all_tasks = service.get_tasks(user_id, skip, limit)
+    pending_tasks = [task for task in all_tasks if not task.is_completed]
+    return pending_tasks

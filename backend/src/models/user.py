@@ -11,8 +11,8 @@ class User(SQLModel, table=True):
     email: str = Field(unique=True, nullable=False, index=True)
     password_hash: str = Field(nullable=False)
     name: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Add relationship to tasks
     # tasks: List["Task"] = Relationship(back_populates="user")

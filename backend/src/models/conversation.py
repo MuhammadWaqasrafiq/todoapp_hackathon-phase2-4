@@ -1,6 +1,6 @@
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 class Conversation(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
